@@ -10,12 +10,8 @@ notebook_cache/
 # 忽略BRICK项目（独立的GitHub仓库）
 BRICK/
 
-# 忽略向量库文件
-vectorstore/
-
-# 忽略导出的压缩包
+# 忽略导出的压缩包（文件太大）
 *.tar.gz
-biomics_environment.yml
 
 # Python
 __pycache__/

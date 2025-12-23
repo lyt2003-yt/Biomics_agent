@@ -1,3 +1,4 @@
+import os
 import scanpy as sc
 import pandas as pd
 import numpy as np
@@ -26,6 +27,10 @@ def summarize_data_tool(data_path, preview_n=5) -> Output:
     Returns:
         output: A dictionary containing the key "data_info" and its value is a dictionary containing the unique values of each attribute
     """
+    # 检查文件是否存在
+    if not os.path.exists(data_path):
+        return {"data_info": "No target data found."}
+    
     adata = sc.read_h5ad(data_path)
     attributes = ['X', 'obs', 'var', 'uns', 'obsm', 'varm', 'layers', 'obsp']
     data_info = {}
@@ -128,5 +133,6 @@ def summarize_data_tool(data_path, preview_n=5) -> Output:
     return output
 
 if __name__ == "__main__":
-    data_info = summarize_data_tool.invoke({"data_path":"./enhanced_simulated.h5ad"})
+    data_info = summarize_data_tool.invoke({"data_path":"/home/lyt/Biomics_agent/simulated_dat.h5ad"})
+    print(type(data_info))
     print(data_info)

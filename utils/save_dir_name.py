@@ -1,8 +1,15 @@
 import os
 import time
+from pathlib import Path
+from dotenv import load_dotenv
 from graph.llm import get_llm_by_type
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
+
+# 加载环境变量
+config_file = Path(__file__).parent.parent / 'graph' / 'brick_test_config.env'
+load_dotenv(dotenv_path=str(config_file))
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def summarize_question(question: str) -> str:
     model = get_llm_by_type("basic")
@@ -36,7 +43,9 @@ Output: "Add_calculation"
         output = result.content
     return output 
 
-def get_save_dir(question: str, save_path: str = "./") -> str:
+def get_save_dir(question: str, save_path: str = None) -> str:
+    if save_path is None:
+        save_path = os.path.join(PROJECT_ROOT, "run_res")
     summary = summarize_question(question)
     timestamp = time.strftime("%a_%b_%d_%Y_%H_%M_%S", time.localtime())
     folder_name = f"{summary}_{timestamp}"

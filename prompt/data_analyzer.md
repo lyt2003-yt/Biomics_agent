@@ -40,7 +40,7 @@ Available tools:
 {
   "thought": "<Explain your step-by-step reasoning with references to AnnData attributes>",
   "output": "<Human-readable in-depth data analysis report, including a preprocessing status report and a summary table. Use \\n for line breaks and escape all special characters properly>",
-  "status": "NOT_FINISHED"
+  "status": "VALIDATED"
 }
 
 **MANDATORY RULES:**

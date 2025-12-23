@@ -14,7 +14,7 @@ data_info: {{data_info}}
 data_repo: {{data_repo}}
 step_content: {{step_content}}
 find_function: {{find_function}}
-data_path: {{data_path}}
+data_path: {{docker_data_path}}
 brick_info: {{brick_info}}
 notebook_text: {{notebook_text}}
 The code generated previously:{{full_code}}
@@ -42,12 +42,11 @@ BRICK must to use the Biomedical Knowledge Graph's schema.
 1. Read the BRICK_overview in order to understand the BRICK modules and their functions.
 2. Understand the step_content that need to be implemented.
 3. Check data information to see which attribute names can be used, check also the subgroup number in the data. If there are multiple subgroups, this implies that your code should use a "for" loop to handle them.
-4. Check data analysis report to understand what kind of process that user has done.
-5. Check the "find_function" which is the referrence function for implementing the step.Focus on the parameter ,return fomat and the usage of the function.The "find_function" ONLY contains the BRICK module and function,if the step doesn't contains any BRICK module function, you MUST skip this step and move to the next step.
-6. Check the data path and replace the path into the function.
-7. Base on the above information, use real attribute names in the data to provide a valid python code. Never assume the attribute name.
-8. Always start with load package and load data step.
-9. Never translate "your observation" action into code.
+4. Check the "find_function" which is the referrence function for implementing the step.Focus on the parameter ,return fomat and the usage of the function.The "find_function" ONLY contains the BRICK module and function,if the step doesn't contains any BRICK module function, you MUST skip this step and move to the next step.
+5. Check the data path and replace the path into the function.
+6. Base on the above information, use real attribute names in the data to provide a valid python code. Never assume the attribute name.
+7. Do not repeat any code that has already appeared in “The code generated previously”.
+8. Never translate "your observation" action into code.
 </script_steps>
 
 <important_tips>
@@ -63,16 +62,9 @@ DO NOT use direct function imports like:
 from BRICK.pp import filter_marker
 filter_marker()
 ```
+If the "find_function" is empty, this usually means that the BRICK package is not needed for this step.
 </important_tips>
 
-
-<decision_logic>
-After generating the code:
-- If the code generation is successful and the code appears to be executable, route to code_evaluator for validation
-- If there are issues with the code generation or if further planning/execution steps are needed, route to plan_executor
-
-**CRITICAL**: You MUST respond in strict JSON format. Do not use tool calls or any other response mechanism.
-</decision_logic>
 
 <output_format>
 **IMPORTANT**: Your response MUST be a valid JSON object. Do NOT include any text before or after the JSON. Start your response with "{" and end with "}". Do NOT use tool calls or any other response format.
@@ -81,8 +73,6 @@ Respond with a **valid JSON** object in this format:
 {
   "thought": "<Explain your step-by-step reasoning for code generation>",
   "output": "<The generated Python code as a valid string object,DO NOT output any other text here, only the code>",
-  "status": "VALIDATED",
-  "next": "code_runner"
 }
 
 **MANDATORY RULES**:

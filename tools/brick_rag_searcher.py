@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from IPython.display import Image, display
 from rapidfuzz import fuzz
 from langchain.tools import tool
-from llm import embedding_model, basic_llm as model
+from graph.llm import embedding_model, basic_llm as model
 
 class RAGState(BaseModel):
     query: str = ""

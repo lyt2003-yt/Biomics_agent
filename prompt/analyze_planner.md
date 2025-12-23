@@ -36,7 +36,7 @@ BRICK must to use the Biomedical Knowledge Graph's schema.
 - Data info: {{data_info}}
 - Data report: {{data_repo}}
 - Current plan (if any): {{current_plan}}
-- Reference notebook path: {{reference_notebook_path}}
+- Reference notebook content: {{notebook_text}}
 </content>
 
 <task>

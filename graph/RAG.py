@@ -11,7 +11,7 @@ from pathlib import Path
 from rapidfuzz import fuzz
 from langchain.docstore.document import Document
 
-from config import model_v3, output_parser, str_output_parser, model_q, embedding_model
+from .config import model_v3, output_parser, str_output_parser, model_q, embedding_model
 #from utils import timed_node
 import logging
 #from logger import setup_logger
@@ -621,7 +621,7 @@ def search_notebook(state: RAGState):
     vs = names.get("names", [])
     if len(vs) > 0:
         key_temp = f""" 
-        #Task# 
+        #Task#
         Extract the keywords from the problem, such as function names, package names, and purposes.
 
         #Question#
@@ -848,5 +848,5 @@ def RAG_func(query, vectorstore = None, search_k: int = 3, score_threshold: floa
     return answer["final_result"]
 
 if __name__ == '__main__':
-    a = RAG(query="Use BRICK.pp.complete_results to integrate KG-based insights with trajectory data.",vectorstore={"Code":"/home/lyt/checker_finallap/BRICK2/BRICK-main/vectorstore/BRICK_code4.faiss","Notebook":"/home/lyt/checker_finallap/BRICK/vectorstore/BRICK_notebook2.faiss"})
+    a = RAG_func(query="brick.rk.rank_voting",vectorstore={"Code":"/home/liyuntian/Biomics_agent/BRICK/vectorstore/BRICK_code4.faiss","Notebook":"/home/liyuntian/Biomics_agent/BRICK/vectorstore/BRICK_notebook2.faiss"})
     print(a)

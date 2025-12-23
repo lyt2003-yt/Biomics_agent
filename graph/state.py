@@ -1,8 +1,14 @@
+import os
 from pydantic import BaseModel, Field, model_validator
 from langchain_core.messages import AnyMessage, BaseMessage
 from langgraph.graph.message import add_messages
 from datetime import datetime
 from typing import Annotated, Literal, Union, List, Dict, Any, Optional
+
+from pynndescent.pynndescent_ import process_candidates
+
+# 获取项目根目录
+PROJECT_ROOT = os.getenv('PROJECT_ROOT', os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 class BrickState(BaseModel):
     # 分析LLM生成的plan
@@ -35,10 +41,15 @@ class BrickState(BaseModel):
     data_path: Optional[str] = None
     # 数据的报告
     data_repo: Optional[Union[str,dict,list]] = None
+    # docker中的数据路径
+    docker_data_path: Optional[str] = None
     # debug历史记录
     debug_history: List[Dict[str, Any]] = []
     # 默认的向量库
-    default_vectorstore: dict = {"Code":"/home/lyt/checker_finallap/BRICK2/BRICK-main/vectorstore/BRICK_code4.faiss","Notebook":"/home/lyt/checker_finallap/BRICK/vectorstore/BRICK_notebook2.faiss"}
+    default_vectorstore: dict = {
+        "Code": os.path.join(PROJECT_ROOT, "vectorstore/BRICK_code.faiss"),
+        "Notebook": os.path.join(PROJECT_ROOT, "vectorstore/BRICK_notebook.faiss")
+    }
     # LLM对step的执行判断
     execution: Optional[Union[str, dict]] = None
     # 函数执行的结果
@@ -56,20 +67,7 @@ class BrickState(BaseModel):
     # 可用的function
     functions: list[Union[str,list]] = []
     # 所有生成的代码
-    full_code: Optional[str] = """
-import os
-import sys
-os.chdir("/home/lyt/checker_finallap") # your working path
-sys.path.append("/home/lyt/checker_finallap")
-
-import BRICK
-url = "neo4j://10.224.28.66:7687"
-auth = ("neo4j", "bmVvNGpwYXNzd29yZA==")
-
-
-BRICK.config(url=url, auth=auth)
-
-"""
+    full_code: Optional[list[str]] = []
     # KG的schema
     kg_schema: dict = {"nodes": [], "edges": []}
     # 语言
@@ -87,7 +85,7 @@ BRICK.config(url=url, auth=auth)
     # 记忆：每一轮agent的对话
     messages: Annotated[list[AnyMessage], add_messages]
     # notebook默认库
-    notebooks_path: str = "/home/lyt/checker_finallap/notebooks"
+    notebooks_path: str = os.path.join(PROJECT_ROOT, "notebooks")
     # notebook的文本内容
     notebook_text: Optional[str] = """
     
@@ -427,6 +425,8 @@ sc.pl.umap(adata, color = 'celltype')
     next: Literal["env_checker", "supervisor", "translator", "data_analyzer", "analyze_planner", "analyse_planner", "planner", "planner_stepwise", "searcher", "BRICK_searcher", "bkg_searcher", "plan_reviewer", "plan_executor", "plan_checker", "plan_strategy", "coder", "code_runner","code_debugger","code_evaluator", "code_controller", "code_executer", "responder", "general_responder", "step_checker", "step_spliter", "parse_interact", "parse_update", "test", "verify", "END"] = "supervisor"
     # Agent的系统输出
     output: Optional[Union[str, dict, list]] = None
+    #代码运行是否成功
+    process_flag: int = -1
     # 预定义的plan
     predefined_plans: dict = {
         "trajectory_inference": [
@@ -460,14 +460,16 @@ sc.pl.umap(adata, color = 'celltype')
     reference_notebook_path: Optional[str] = None
     # 保存目录
     save_dir: str = "./"
+    # 沙箱id
+    sandbox_id: Optional[str] = None
     # 状态
-    status: str = "STARTING"
+    status: str = "NOT_FINISHED"
     # 单独的step
     step: list[Union[str, dict, list]] = []
     # 单独的step
     step_output: Optional[Union[str, dict]] = None
     # 单独的step的输出
-    step_content:dict = {} 
+    step_content:Optional[dict] = {} 
     # LLM的思考过程
     thought: Optional[str]= None
     # 翻译后的用户问题

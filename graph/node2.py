@@ -2,32 +2,36 @@ import os
 import subprocess
 
 from scanpy import read_10x_h5
-from Debugger_simplified import debug
+from .Debugger_simplified import debug
 from tools.mock_adata import generate_enhanced_simulated_data_tool
 from tools.summarize_data import summarize_data_tool
 from tools.valid_h5ad import validate_h5ad_structure_tool
 from tools.write_file import write_file_tool
-from create_agent import create_agent
-from state import BrickState
+from .create_agent import create_agent
+from .state import BrickState
 from langchain_core.messages import SystemMessage, HumanMessage
 import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from utils.sandbox_client import DockerSandbox
+from utils.exec_res_tool import (
+    format_stdout, format_stderr, format_result,
+    format_images, format_error, has_error
+)
+from utils.docker_path_transform import transform_path
 from tools.extract_code import extract_python_blocks_tool
 from tools.read_notebook import read_notebook_tool
 from tools.brick_rag_searcher import perform_rag_search_tool
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-from output import safe_stream_model
-from llm import basic_llm as model
-from RAG import RAG, RAG_func
-from notebook_finder import find_notebook
+from .output import safe_stream_model
+from .llm import basic_llm as model
+from .RAG import RAG, RAG_func
+from .notebook_finder import find_notebook
 output_parser = JsonOutputParser()
 
 def env_checker(state: BrickState) -> BrickState:
-    print("env_checker received state:", state)
-    print("now msg:",state.messages)
-    #state.messages.append(SystemMessage(role="user", content=state.question))
+
 
     if state.update_data_info:
         state.messages.append(HumanMessage(content=state.update_data_info))
@@ -45,25 +49,22 @@ def env_checker(state: BrickState) -> BrickState:
         state.model_dump()
     )
     invoke_message = state.messages[-2:]
-    print("env_checker invoke message:",invoke_message)
     print("message list:",state.messages)
     result = agent.invoke({"messages":invoke_message})
     #result = safe_stream_agent_json(agenmessages[-1]t, {"messages":state.messages[-1]})
     
-    print("env_checker result:", result)
-    print("env_checker result type:", type(result))
 
     if "messages" in result:
-        for msg in result["messages"]:
-            print("msg:",msg)
-        result = result["messages"][-1].content
-    result = json.loads(result)
 
+        result = result["messages"][-1].content
+        print("env_checker result:", result)
+    result = json.loads(result)
+    print("env_checker result:", result)
     if isinstance(result, dict):
         print("[thought]", result["thought"])
         print("[output]", result["output"])
             
-        new_message = SystemMessage(content=f"thought: {result['thought']}, output: {result['output']}, data_info: {result['data_info']}, status: {result['status']}")
+        new_message = SystemMessage(content=f"thought: {result['thought']}, output: {result['output']}, status: {result['status']}")
         updated_state = state.model_copy(
             update={
                 "messages": state.messages + [new_message],
@@ -73,7 +74,7 @@ def env_checker(state: BrickState) -> BrickState:
                 "status": result["status"],
                 "valid_data": result["valid_data"],
                 "data_path": result["data_path"],
-                "data_info": result["data_info"],
+                "data_info": summarize_data_tool.invoke({"data_path": result["data_path"]})["data_info"] if result.get("data_path") else "No target data found.",
                 "make_env_check" : True,
                 "agent":"env_checker"
             },
@@ -91,13 +92,18 @@ def env_checker(state: BrickState) -> BrickState:
             }
         )
 
-    print("env_checker updated state:", updated_state)
     return updated_state
 
 def supervisor(state: BrickState) -> BrickState:
-    print("supervisor received state:", state)
-    print("now msg:", state.messages)
 
+    box = DockerSandbox(server_url="127.0.0.1:8888", workspace="/workspace")
+    
+    if not box.start():
+        print("沙箱启动失败")
+        exit(1)
+    
+    print(f"\n沙箱 ID: {box.get_id()}")
+    sandbox_id = box.get_id()
     agent = create_agent(
         "supervisor",
         "supervisor",
@@ -106,10 +112,9 @@ def supervisor(state: BrickState) -> BrickState:
         state.model_dump()
     )
     
-    print("supervisor invoke message:", state.messages[-1])
+    print("supervisor invoke message")
     result = agent.invoke({"messages": state.messages[-1]})
-    print("supervisor result:", result)
-    print("supervisor result type:", type(result))
+    print("supervisor result")
     
     if "messages" in result:
         result = result["messages"][-1].content
@@ -122,6 +127,10 @@ def supervisor(state: BrickState) -> BrickState:
     
     if not isinstance(result, dict):
         result = {}
+    if state.data_path:
+        docker_data_path = transform_path(state.data_path)
+    else:
+        docker_data_path = None
     
     print("[thought]", result.get("thought", []))
     print("[output]", result.get("output", []))
@@ -133,18 +142,17 @@ def supervisor(state: BrickState) -> BrickState:
             "thought": result.get("thought", []),
             "next": result.get("next", []),
             "status": "NOT_FINISHED",
-            "data_path": result.get("data_path", ""),
+            "docker_data_path": docker_data_path,
+            "sandbox_id": sandbox_id,
             "output": result.get("output", []),
             "agent": "supervisor"
         }
     )
-    
-    print("supervisor updated state:", updated_state)
+
     return updated_state
 
 def translator(state: BrickState) -> BrickState:
-    print("translator received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "translator", 
@@ -160,8 +168,7 @@ def translator(state: BrickState) -> BrickState:
     print("translator result type:", type(result))
     
     if "messages" in result:
-        for msg in result["messages"]:
-            print("msg:", msg)
+
         result = result["messages"][-1].content
     result = json.loads(result)
     
@@ -184,11 +191,11 @@ def translator(state: BrickState) -> BrickState:
         }
     )
     
-    print("translator updated state:", updated_state)
+
     return updated_state
 
 def data_analyzer(state: BrickState) -> BrickState:
-    print("data_analyzer received state:", state)
+    print("data_analyzer received state:")
 
     if state.update_data_repo:
         state.messages.append(HumanMessage(content=state.update_data_repo))
@@ -196,9 +203,9 @@ def data_analyzer(state: BrickState) -> BrickState:
     agent = create_agent("data_analyzer", "data_analyzer", [], "data_analyzer", state.model_dump())
     #result = safe_stream_agent_json(agent, state.model_dump())
 
-    print("data_analyzer invoke message:",state.messages[-1])
+    print("data_analyzer invoke message:")
     result = agent.invoke({"messages":[state.messages[-1]]})
-    print("data_analyzer result:", result)
+    print("data_analyzer result:")
 
     if "messages" in result:
         result = result["messages"][-1].content
@@ -228,8 +235,8 @@ def data_analyzer(state: BrickState) -> BrickState:
                 "output": result["output"],
                 "make_data_repo": True,
                 "final_result": result["output"],
-                "status": "NOT_FINISHED",
-                "next": "supervisor",
+                "status": "VALIDATED",
+                "next": "analyze_planner",
                 "agent": "data_analyzer"
             })
     else:
@@ -244,14 +251,12 @@ def data_analyzer(state: BrickState) -> BrickState:
             }
         )
 
-    print("updated state: ",updated_state)
+
     #updated_state.messages.append(new_message)
     return updated_state
 
 def analyze_planner(state: BrickState) -> BrickState:
-    print("analyze_planner received state:", state)
-    print("now msg:", state.messages)
-  
+
     agent = create_agent(
         "analyze_planner", 
         "analyze_planner", 
@@ -298,18 +303,16 @@ def analyze_planner(state: BrickState) -> BrickState:
                 "output": result.get("output", ""),
                 "a_plan": result.get("output", ""),
                 "status": "NOT_FINISHED",
-                "next": "supervisor",
+                "next": "planner",
                 "make_analysis": True,
                 "agent": "analyze_planner"
             }
         )
-    
-    print("analyze_planner updated state:", updated_state)
+
     return updated_state
 
 def planner(state: BrickState) -> BrickState:
-    print("planner received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "planner", 
@@ -318,11 +321,11 @@ def planner(state: BrickState) -> BrickState:
         "planner",
         state.model_dump()
     )
-    print("planner invoke message:", state.messages[-1])
+    print("planner invoke message:")
     result = agent.invoke({"messages": state.messages})
     
-    print("planner result:", result)
-    print("planner result type:", type(result))
+    print("planner result:")
+    print("planner result type:")
     
     if "messages" in result:
         result = result["messages"][-1].content
@@ -346,18 +349,17 @@ def planner(state: BrickState) -> BrickState:
             "output": result.get("output", ""),
             "current_plan": result.get("output", ""),
             "next": result.get("next", ""),
-            "status": result.get("status", ""),
+            "status": "NOT_FINISHED",
             "make_plan": True,
             "agent": "planner"
         }
     )
     
-    print("planner updated state:", updated_state)
+
     return updated_state
 
 def code_debugger(state: BrickState) -> BrickState:
-    print("code_debugger received state:", state)
-    print("now msg:", state.messages)
+
     agent = create_agent(
         "code_debugger", 
         "code_debugger", 
@@ -387,27 +389,28 @@ def code_debugger(state: BrickState) -> BrickState:
     print("code_debugger result2:", result)
     print("[thought]", result.get("thought", ""))
     print("[output]", result.get("output", ""))
-    
+    new_full_code = state.full_code
+    new_full_code[-1] = result.get("output", "")
     new_message = SystemMessage(content=f"thought: {result.get('thought', '')}, full_code: {result.get('output', '')}")
     updated_state = state.model_copy(
         update={
             "messages": state.messages + [new_message],
             "thought": result.get("thought", ""),
             "output": result.get("output", ""),
-            "full_code": result.get("output", ""),
-            "next": result.get("next", ""),
-            "status": result.get("status", ""),
+            "full_code": new_full_code,
+            "code":result.get("output", ""),
+            "next": "code_runner",
+            "status": "NOT_FINISHED",
             "agent": "code_debugger"
         }
     )
     
-    print("code_debugger updated state:", updated_state)
+
     return updated_state
 
 
 def plan_reviewer(state: BrickState) -> BrickState:
-    print("plan_reviewer received state:", state)
-    print("now msg:", state.messages)
+
     
     if state.update_instruction:
         state.messages.append(HumanMessage(content=state.update_instruction[-1]))
@@ -419,11 +422,10 @@ def plan_reviewer(state: BrickState) -> BrickState:
         "plan_reviewer",
         state.model_dump()
     )
-    print("plan_reviewer invoke message:", state.messages[-1])
+    print("plan_reviewer invoke message:")
     result = agent.invoke({"messages": [state.messages[-1]]})
     
-    print("plan_reviewer result:", result)
-    print("plan_reviewer result type:", type(result))
+    print("plan_reviewer result:")
     
     if "messages" in result:
         result = result["messages"][-1].content
@@ -452,13 +454,11 @@ def plan_reviewer(state: BrickState) -> BrickState:
         }
     )
     
-    print("plan_reviewer updated state:", updated_state)
+
     return updated_state
 
 def responder(state: BrickState) -> BrickState:
-    print("responder received state:", state)
-    print("now msg:", state.messages)
-    
+
     agent = create_agent(
         "responder", 
         "responder", 
@@ -466,11 +466,11 @@ def responder(state: BrickState) -> BrickState:
         "responder",
         state.model_dump()
     )
-    print("responder invoke message:", state.messages[-1])
+    print("responder invoke message:")
     result = agent.invoke({"messages": [state.messages[-1]]})
     
-    print("responder result:", result)
-    print("responder result type:", type(result))
+    print("responder result:")
+
     
     if "messages" in result:
         result = result["messages"][-1].content
@@ -483,24 +483,22 @@ def responder(state: BrickState) -> BrickState:
     if not isinstance(result, dict):
         result = {}
     
-    print("[answer]", result.get("answer", ""))
+    print("[answer]", result.get("output", ""))
     
-    new_message = SystemMessage(content=f"final_answer: {result.get('answer', '')}")
+    new_message = SystemMessage(content=f"final_answer: {result.get('output', '')}")
     updated_state = state.model_copy(
         update={
             "messages": state.messages + [new_message],
-            "final_answer": result.get("answer", ""),
+            "thought": result.get("thought", ""),
+            "output": result.get("output", ""),
+            "final_answer": result.get("output", ""),
             "status": "FINISHED",
             "agent": "responder"
         }
     )
-    
-    print("responder updated state:", updated_state)
-    return updated_state
 
 def plan_executor(state: BrickState) -> BrickState:
-    print("plan_executor received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "plan_executor", 
@@ -509,11 +507,10 @@ def plan_executor(state: BrickState) -> BrickState:
         "plan_executor",
         state.model_dump()
     )
-    print("plan_executor invoke message:", state.messages[-1])
+    print("plan_executor invoke message:")
     result = agent.invoke({"messages": [state.messages[-1]]})
     
-    print("plan_executor result:", result)
-    print("plan_executor result type:", type(result))
+    print("plan_executor result:")
 
 
     if "messages" in result:
@@ -531,10 +528,17 @@ def plan_executor(state: BrickState) -> BrickState:
     print("[thought]", result.get("thought", ""))
     print("[output]", result.get("output", ""))
     print("== starting RAG ==")
-    rag_res = RAG_func(query=json.dumps(result.get("step_content", "")),vectorstore=state.default_vectorstore)
+    if result.get("step_content", ""):
+        rag_res = RAG_func(query=json.dumps(result.get("step_content", "")),vectorstore=state.default_vectorstore)
+    else:
+        rag_res = ""
     print("== rag_res ==", rag_res)
     new_message = SystemMessage(content=f"thought: {result.get('thought', '')}, output: {result.get('output', '')}")
-    updated_checked_step = result.get("checked_step", state.checked_step)
+    updated_checked_step = state.checked_step
+    if len(updated_checked_step) == 0:
+        updated_checked_step.append(1)
+    else:
+        updated_checked_step.append(updated_checked_step[-1] + 1)
 
     updated_state = state.model_copy(
         update={
@@ -550,12 +554,11 @@ def plan_executor(state: BrickState) -> BrickState:
         }
     )
     
-    print("plan_executor updated state:", updated_state)
+
     return updated_state
 
 def searcher(state: BrickState) -> BrickState:
-    print("searcher received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "searcher", 
@@ -564,7 +567,7 @@ def searcher(state: BrickState) -> BrickState:
         "searcher",
         state.model_dump()
     )
-    print("searcher invoke message:", state.messages[-1])
+    print("searcher invoke message:")
     result = agent.invoke({"messages": [state.messages[-1]]})
     
     print("searcher result:", result)
@@ -596,12 +599,11 @@ def searcher(state: BrickState) -> BrickState:
         }
     )
     
-    print("searcher updated state:", updated_state)
+
     return updated_state
 
 def bkg_searcher(state: BrickState) -> BrickState:
-    print("bkg_searcher received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "bkg_searcher", 
@@ -641,13 +643,11 @@ def bkg_searcher(state: BrickState) -> BrickState:
             "agent": "bkg_searcher"
         }
     )
-    
-    print("bkg_searcher updated state:", updated_state)
+
     return updated_state
 
 def coder(state: BrickState) -> BrickState:
-    print("coder received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "coder", 
@@ -657,15 +657,14 @@ def coder(state: BrickState) -> BrickState:
         state.model_dump()
     )
     invoke_message = state.messages
-    print("coder invoke message:", invoke_message)
+    print("coder invoke message:")
     result = agent.invoke({"messages": invoke_message})
     
-    print("coder result:", result)
-    print("coder result type:", type(result))
+    print("coder result:")
+
     
     if "messages" in result:
-        for msg in result["messages"]:
-            print("msg:",msg)
+
         result = result["messages"][-1].content
     # Robust JSON parsing with fallback to raw text
     try:
@@ -675,16 +674,17 @@ def coder(state: BrickState) -> BrickState:
     if isinstance(result, dict):
         print("[thought]", result.get("thought", ""))
         print("[output]", result.get("output", ""))
-
+        new_full_code = state.full_code
+        new_full_code.append(result["output"])
         new_message = SystemMessage(role="assistant", content=f"thought: {result['thought']}, code: {result['output']}")
         updated_state = state.model_copy(update={
             "messages": state.messages + [new_message],
             "thought": result["thought"],
             "output": result.get("output", ""),
-            "full_code": state.full_code + "\n" + result["output"],
+            "full_code": new_full_code,
             "code": result["output"],
             "next": "code_runner",
-            "status": "CODE_CONFIRMATION",
+            "status": "NOT_FINISHED",
             "agent": "coder"
         })
     else:
@@ -720,13 +720,11 @@ def coder(state: BrickState) -> BrickState:
             "status": result.get("status", "")
         }
     )
-    
-    print("coder updated state:", updated_state)
+
     return updated_state
 
 def code_controller(state: BrickState) -> BrickState:
-    print("code_controller received state:", state)
-    print("now msg:", state.messages)
+
     
     agent = create_agent(
         "code_controller", 
@@ -767,12 +765,11 @@ def code_controller(state: BrickState) -> BrickState:
         }
     )
     
-    print("code_controller updated state:", updated_state)
+
     return updated_state
 
 def code_evaluator_old(state: BrickState) -> BrickState:
-    print("code_evaluator received state:", state)
-    print("now msg:", state.messages)
+
     agent = create_agent(
         "code_evaluator", 
         "code_evaluator", 
@@ -811,7 +808,7 @@ def code_evaluator_old(state: BrickState) -> BrickState:
         }
     )
     
-    print("code_evaluator updated state:", updated_state)
+
     return updated_state
 
 def code_evaluator(state: BrickState):
@@ -887,8 +884,6 @@ def code_evaluator(state: BrickState):
     return updated_state
 
 def code_executer_old(state: BrickState) -> BrickState:
-    print("code_executer received state:", state)
-    print("now msg:", state.messages)
     
     agent = create_agent(
         "code_executer", 
@@ -927,8 +922,7 @@ def code_executer_old(state: BrickState) -> BrickState:
             "status": result.get("status", "")
         }
     )
-    
-    print("code_executer updated state:", updated_state)
+
     return updated_state
 
 def code_executer(step: str, code: str, step_id: str, keep_files: bool = False, save_dir: str = None) -> dict:
@@ -1055,8 +1049,6 @@ if __name__ == "__main__":
                     pass
 
 def general_responder(state: BrickState) -> BrickState:
-    print("general_responder received state:", state)
-    print("now msg:", state.messages)
     
     agent = create_agent(
         "general_responder", 
@@ -1065,11 +1057,11 @@ def general_responder(state: BrickState) -> BrickState:
         "general_responder",
         state.model_dump()
     )
-    print("general_responder invoke message:", state.messages[-1])
+    print("general_responder invoke message:")
     result = agent.invoke({"messages": [state.messages[-1]]})
     
-    print("general_responder result:", result)
-    print("general_responder result type:", type(result))
+    print("general_responder result:")
+
     
     if "messages" in result:
         result = result["messages"][-1].content
@@ -1091,43 +1083,137 @@ def general_responder(state: BrickState) -> BrickState:
             "messages": state.messages + [new_message],
             "thought": result.get("thought", ""),
             "output": result.get("output", ""),
-            "next": result.get("next", ""),
-            "status": result.get("status", ""),
+            "status": "FINISHED",
             "agent": "general_responder"
         }
     )
     
-    print("general_responder updated state:", updated_state)
+
     return updated_state
 
 def notebook_searcher(state: BrickState) -> BrickState:
     print("find notebook:", find_notebook(state.question,state.notebooks_path))
     updated_state = state.model_copy(
         update={
-            "reference_notebook_path": find_notebook(state.question,state.notebooks_path)
+            "reference_notebook_path": find_notebook(state.question,state.notebooks_path),
+            "status": "NOT_FINISHED"
         }
     
     )
     return updated_state
 
 def code_runner(state: BrickState) -> BrickState:
-    success, code, output = debug(state.step,state.full_code,work_dir=state.save_dir)
-    if success:
-        updated_state = state.model_copy(
+    """代码执行节点 - 通过沙箱运行代码
+    
+    从 state 中获取 sandbox_id，连接到对应的沙箱，执行 state.code
+    """
+    print("code_runner received state:")
+    
+    # 检查是否有 sandbox_id
+    if not state.sandbox_id:
+        error_msg = "沙箱未初始化，state 中缺少 sandbox_id"
+        print(f"❌ {error_msg}")
+        return state.model_copy(
             update={
-                "code_output": state.code_output+[output],
-                "next": "plan_executor",
-                "status": "VALIDATED",
+                "process_flag": 0,
+                "error_message": error_msg,
+                "next": "code_debugger",
+                "status": "ERROR",
                 "agent": "code_runner"
             }
         )
-    else:
-        updated_state = state.model_copy(
+    
+    # 检查是否有代码
+    if not state.code:
+        error_msg = "没有要执行的代码，state.code 为空"
+        print(f"❌ {error_msg}")
+        return state.model_copy(
             update={
-                "error_message": output,
-                "next": "code_debugger",
+                "process_flag": 0,
+                "error_message": error_msg,
+                "next": "coder",
                 "status": "NOT_FINISHED",
                 "agent": "code_runner"
             }
         )
-    return updated_state
+    
+    try:
+        # 1. 重建沙箱客户端，连接到已存在的内核
+        print("connecting sandbox")
+        box = DockerSandbox(
+            server_url="127.0.0.1:8888",
+            workspace="/workspace"
+        )
+        box.kernel_id = state.sandbox_id
+
+        max_retries = 60        # 最多重试 60 次
+        retry_interval = 1.0    # 每次间隔 1 秒
+
+        attempt = 0
+        while True:
+            print(f"🔌 尝试连接沙箱（第 {attempt + 1} 次）...")
+            if box._connect_ws():
+                break
+            attempt += 1
+            if attempt >= max_retries:
+                raise RuntimeError(f"在重试 {max_retries} 次后仍无法连接沙箱 ID: {state.sandbox_id}")
+            time.sleep(retry_interval)
+
+        print(f"✅ 已连接到沙箱 ID: {state.sandbox_id}")
+            
+        
+        # 2. 执行代码
+        print(f"🚀 开始执行代码 ({len(state.code)} chars)...")
+        result = box.run(state.code, verbose=True)
+        
+        # 3. 解析执行结果
+        stdout_lines = format_stdout(result)
+        result_value = format_result(result)
+        error_msg = format_error(result)
+        is_error = has_error(result)
+        
+        # 5. 根据是否有错误决定下一步
+        if is_error:
+            print(f"❌ 代码执行出错")
+            print(f"错误信息: {error_msg}")
+            
+            updated_state = state.model_copy(
+                update={
+                    "process_flag": 0,
+                    "error_message": error_msg,
+                    "code_output": stdout_lines,
+                    "next": "code_debugger",
+                    "status": "NOT_FINISHED",
+                    "agent": "code_runner"
+                }
+            )
+        else:
+            print(f"✅ 代码执行成功")
+            
+            updated_state = state.model_copy(
+                update={
+                    "process_flag": 1,
+                    "code_output": stdout_lines,
+                    "next": "plan_executor",
+                    "status": "NOT_FINISHED",
+                    "agent": "code_runner"
+                }
+            )
+        
+        return updated_state
+        
+    except Exception as e:
+        error_msg = f"沙箱连接或执行异常: {str(e)}"
+        print(f"❌ {error_msg}")
+        import traceback
+        traceback.print_exc()
+        
+        return state.model_copy(
+            update={
+                "process_flag": 0,
+                "error_message": error_msg,
+                "next": "code_debugger",
+                "status": "ERROR",
+                "agent": "code_runner"
+            }
+        )

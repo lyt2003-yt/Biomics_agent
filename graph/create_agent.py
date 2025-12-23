@@ -1,17 +1,10 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_core.runnables import RunnableLambda
 
-from state import BrickState
-from llm import get_llm_by_type
-from agent import AGENT_LLM_MAP
-from load_template import apply_prompt_template
-
-""" def apply_prompt_template(template_name, state):
-    from load_template import apply_prompt_template as _apply
-    print("my state: ",state)
-    return _apply(template_name, state) """
-
-
+from .state import BrickState
+from .llm import get_llm_by_type
+from .agent import AGENT_LLM_MAP
+from .load_template import apply_prompt_template
 
 from langchain_core.messages import AIMessage
 from typing import Dict, Any
@@ -188,10 +181,10 @@ def create_agent(agent_name: str, agent_type: str, tools: list, prompt_template:
 '''
 from langgraph.prebuilt import create_react_agent
 from langchain_core.runnables import RunnableLambda
-from state import GraphState
-from llm import get_llm_by_type
-from agent import AGENT_LLM_MAP
-from load_template import apply_prompt_template
+from .state import GraphState
+from .llm import get_llm_by_type
+from .agent import AGENT_LLM_MAP
+from .load_template import apply_prompt_template
 from langchain_core.messages import BaseMessage
 
 def create_agent(agent_name: str, agent_type: str, tools: list, prompt_template: str):

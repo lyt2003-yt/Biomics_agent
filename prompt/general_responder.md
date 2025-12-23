@@ -29,6 +29,5 @@ Return a JSON object with the following structure:
 {   
   "thought": "<Your thoughts or reasoning on the user question>",
   "output": "<Your final answer>",
-  "next": "<The next tool to call>",
 }
 </output_format>

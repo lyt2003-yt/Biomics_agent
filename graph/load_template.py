@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Union
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from langchain_core.messages import SystemMessage, BaseMessage
-
-from configuration import Configuration
-from state import BrickState
+from .configuration import Configuration
+from .state import BrickState
 
 # Initialize Jinja2 environment
+PROMPT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompt")
 env = Environment(
-    loader=FileSystemLoader(os.path.dirname(__file__)),
+    loader=FileSystemLoader(PROMPT_DIR),
     autoescape=select_autoescape(),
     trim_blocks=True,
     lstrip_blocks=True,
@@ -40,7 +40,6 @@ def apply_prompt_template(
     else:
         raise ValueError("Invalid state format: must be BrickState or dict")
 
-    print("init state vars:",state_vars)
     # 添加通用变量
     state_vars["CURRENT_TIME"] = datetime.now().strftime("%a %b %d %Y %H:%M:%S %z")
 

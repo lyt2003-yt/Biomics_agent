@@ -64,7 +64,7 @@ def write_file(code, env, work_dir):
     return fname
 
 
-def debug(step, code, work_dir='output', env='python', python_path='python', r_path='R', rag_result=None):
+def debug(step, code, work_dir='output', env='python', python_path='/home/lyt/python-sdk/python3.10.16/bin/python', r_path='R', rag_result=None):
     """
     简化版的debug函数，只执行代码并返回结果，不进行错误处理
     

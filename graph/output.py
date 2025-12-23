@@ -2,7 +2,7 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from tenacity import retry, stop_after_attempt, wait_fixed
 import json
 from typing import Generator, Tuple
-from langchain.schema import AIMessage
+from langchain_core.messages import AIMessage
 
 output_parser = JsonOutputParser()
 str_output_parser = StrOutputParser()

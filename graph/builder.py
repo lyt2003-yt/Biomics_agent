@@ -1,8 +1,8 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from state import BrickState
-from node2 import (
+from .state import BrickState
+from .node2 import (
     env_checker,
     supervisor,
     translator,
@@ -45,6 +45,7 @@ def route_next_step(state: BrickState) -> str:
     if state.status == "FINISHED":
         return "END"
     elif state.next in routing_map:
+        print("choose next step:", state.next)
         return routing_map[state.next]
     else:
         raise ValueError(f"Invalid next step: {state.next}")
@@ -83,7 +84,7 @@ def _build_base_graph():
         route_next_step,
         {
             "env_checker": "env_checker", 
-            "supervisor": "supervisor"
+            "data_analyzer": "data_analyzer"
         }
     )
 
@@ -91,13 +92,6 @@ def _build_base_graph():
         "supervisor",
         route_next_step,
         {
-            "translator": "translator",
-            "analyze_planner": "analyze_planner",
-            "responder": "responder",
-            "data_analyzer": "data_analyzer",
-            "planner": "planner",
-            "plan_executor": "plan_executor",
-            "coder": "coder",
             "env_checker": "env_checker",
             "general_responder": "general_responder"
         }
@@ -108,7 +102,7 @@ def _build_base_graph():
         route_next_step,
         {
             "data_analyzer": "data_analyzer", 
-            "supervisor": "supervisor"
+            "analyze_planner": "analyze_planner"
         }
     )
 
@@ -117,7 +111,7 @@ def _build_base_graph():
         route_next_step,
         {
             "analyze_planner": "analyze_planner", 
-            "supervisor": "supervisor"
+            "planner": "planner"
         }
     )
 
@@ -136,7 +130,7 @@ def _build_base_graph():
         route_next_step,
         {
             "coder": "coder",
-            "supervisor": "supervisor"  
+            "responder": "responder"  
         }
     )
     return builder
@@ -164,96 +158,3 @@ def build_graph():
 if __name__ == "__main__":
     graph = build_graph_with_interaction(interrupt_after=["env_checker","data_analyzer"])
     print(graph.get_graph(xray=True).draw_mermaid())
-'''
-
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
-
-from state import GraphState
-from node import env_checker, data_analyzer
-
-
-def route_next_step(state: GraphState) -> str:
-    """
-    路由决策函数，基于 control 状态字段决定下一步执行哪个节点。
-    """
-    routing_map = {
-        "env_checker": "env_checker",
-        "data_analyzer": "data_analyzer",
-        "END": "END"
-    }
-
-    status = state.control.status
-    next_step = state.control.next
-
-    if status == "FINISHED":
-        return "END"
-    elif next_step in routing_map:
-        return routing_map[next_step]
-    else:
-        raise ValueError(f"Invalid next step: {next_step}")
-
-
-def _build_base_graph() -> StateGraph:
-    """构建基本的 LangGraph 状态图"""
-    builder = StateGraph(GraphState)
-
-    # 起始节点
-    builder.add_edge(START, "env_checker")
-
-    # 节点注册
-    builder.add_node("env_checker", env_checker)
-    builder.add_node("data_analyzer", data_analyzer)
-
-    # 路由逻辑（使用 control.next）
-    builder.add_conditional_edges(
-        "env_checker",
-        route_next_step,
-        {
-            "env_checker": "env_checker",
-            "data_analyzer": "data_analyzer",
-            "END": END
-        }
-    )
-
-    builder.add_conditional_edges(
-        "data_analyzer",
-        route_next_step,
-        {
-            "env_checker": "env_checker",
-            "data_analyzer": "data_analyzer",
-            "END": END
-        }
-    )
-
-    return builder
-
-
-def build_graph() -> StateGraph:
-    """构建无 memory 的静态工作流图"""
-    builder = _build_base_graph()
-    return builder.compile()
-
-
-def build_graph_with_memory() -> StateGraph:
-    """构建带 memory 的工作流图"""
-    builder = _build_base_graph()
-    memory = MemorySaver()
-    return builder.compile(checkpointer=memory)
-
-
-def build_graph_with_interaction(interrupt_before: list[str] = None, interrupt_after: list[str] = None) -> StateGraph:
-    """构建带人工交互中断点的工作流图"""
-    builder = _build_base_graph()
-    memory = MemorySaver()
-    return builder.compile(
-        checkpointer=memory,
-        interrupt_before=interrupt_before,
-        interrupt_after=interrupt_after,
-    )
-
-
-if __name__ == "__main__":
-    graph = build_graph_with_interaction(interrupt_after=["env_checker", "data_analyzer"])
-    print(graph.get_graph(xray=True).draw_mermaid())
-'''
